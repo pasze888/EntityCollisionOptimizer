@@ -12,6 +12,12 @@ import net.minecraft.world.phys.Vec3;
 
 /** Deterministic component and contract checks that may inspect optimizer internals. */
 public final class CollisionContractGameTests {
+    @GameTest(maxTicks = 100)
+    public void indexPublicationDoesNotLoadChunks(GameTestHelper helper) {
+        org.edtp.entitycollisionoptimizer.natives.IndexPublicationChecks.verify(helper);
+        helper.succeed();
+    }
+
     @GameTest(maxTicks = 20)
     public void piglinConversionLifecycle(GameTestHelper helper) {
         Piglin piglin = helper.spawn(EntityTypes.PIGLIN, new Vec3(1.5, 2.0, 1.5));
