@@ -91,8 +91,12 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
         configureEach {
-            // FFM 需要显式开启原生访问；Java 25 仍允许，但会打印警告。
+            // FFM 需要显式开启原生访问。FML 把 mod 放进子 ModuleLayer，
+            // boot 层（含 MDG 自带的这条）的 --enable-native-access 对子层模块不生效，
+            // 因此开发运行时仍会打印一次 native-access 警告；Java 25 允许该调用，模组继续工作。
+            // 仍按 mod id 追加一条，供将来 mod 落在 boot 层（或用户自行启动）时生效。
             jvmArgument '--enable-native-access=ALL-UNNAMED'
+            jvmArgument "--enable-native-access=${project.mod_id}"
             if (benchmarksEnabled) {
                 jvmArgument '-Dentity_collision_optimizer.runBenchmark=true'
             }
