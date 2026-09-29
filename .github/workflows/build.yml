@@ -38,10 +38,13 @@ jobs:
         run: ./.github/scripts/test-release.ps1
 
       - name: Run contract and unit GameTests
-        run: ./gradlew runGameTest -PunitTest --stacktrace
+        run: ./gradlew runGameTestUnit --stacktrace
+
+      - name: Record vanilla baseline traces
+        run: ./gradlew -p vanilla-gametest runGameTestServer --stacktrace
 
       - name: Run cross-process integration GameTests
-        run: ./gradlew runGameTest -PintegrationTest --stacktrace
+        run: ./gradlew runGameTestIntegration --stacktrace
 
       - name: Upload Mod artifacts
         uses: actions/upload-artifact@v4
