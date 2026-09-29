@@ -1,8 +1,9 @@
 package org.edtp.entitycollisionoptimizer.gametest;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.MinecraftServer;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer;
 import org.edtp.entitycollisionoptimizer.natives.CollisionFrame;
 
@@ -19,8 +20,9 @@ public final class CollisionBenchmarkRunner {
     private static final ArrayDeque<BenchmarkRun> pending = new ArrayDeque<>();
 
     static {
-        ServerTickEvents.START_SERVER_TICK.register(CollisionBenchmarkRunner::onTickStart);
-        ServerTickEvents.END_SERVER_TICK.register(CollisionBenchmarkRunner::onTickEnd);
+        // Fabric 的 START/END_SERVER_TICK → NeoForge 的 ServerTickEvent.Pre/Post（同一位置触发）。
+        NeoForge.EVENT_BUS.addListener(ServerTickEvent.Pre.class, event -> onTickStart(event.getServer()));
+        NeoForge.EVENT_BUS.addListener(ServerTickEvent.Post.class, event -> onTickEnd(event.getServer()));
     }
 
     static void run(GameTestHelper helper, BenchmarkScenario scenario) {

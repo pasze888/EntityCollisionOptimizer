@@ -19,6 +19,15 @@ collision rules, and publish each velocity or movement update at the same point.
 [[mixins]]
 config="entity_collision_optimizer.mixins.json"
 
+# 以下两份只在开发运行（gameTestServer）里存在：它们的 json 位于测试源集的 resources，
+# 插件类也只在测试源集编译。发布 jar 里两者都不存在，FML 找不到配置即跳过，
+# 因此不会把测试 mixin 带进生产环境。
+[[mixins]]
+config="entity_collision_optimizer-gametest.mixins.json"
+
+[[mixins]]
+config="entity_collision_optimizer-unit.mixins.json"
+
 [[dependencies.${mod_id}]]
     modId="neoforge"
     type="required"

@@ -2,7 +2,9 @@ package org.edtp.entitycollisionoptimizer.gametest;
 
 import org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer;
 import org.edtp.entitycollisionoptimizer.gametest.mixin.ZombieTestInvoker;
-import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import org.edtp.entitycollisionoptimizer.gametest.harness.GameTestSpec;
+
+// GameTestSpec / GameTestRegistration 位于主源集：发布 jar 里没有测试类，主源集按名字反射回去。
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.hoglin.Hoglin;
@@ -12,14 +14,14 @@ import net.minecraft.world.phys.Vec3;
 
 /** Deterministic component and contract checks that may inspect optimizer internals. */
 public final class CollisionContractGameTests {
-    @GameTest(maxTicks = 100)
-    public void indexPublicationDoesNotLoadChunks(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 100)
+    public static void indexPublicationDoesNotLoadChunks(GameTestHelper helper) {
         org.edtp.entitycollisionoptimizer.natives.IndexPublicationChecks.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 20)
-    public void piglinConversionLifecycle(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 20)
+    public static void piglinConversionLifecycle(GameTestHelper helper) {
         Piglin piglin = helper.spawn(EntityType.PIGLIN, new Vec3(1.5, 2.0, 1.5));
         piglin.setTimeInOverworld(300);
         helper.runAfterDelay(5, () -> {
@@ -28,8 +30,8 @@ public final class CollisionContractGameTests {
         });
     }
 
-    @GameTest(maxTicks = 20)
-    public void zombieDrownedConversionLifecycle(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 20)
+    public static void zombieDrownedConversionLifecycle(GameTestHelper helper) {
         Zombie zombie = helper.spawn(EntityType.ZOMBIE, new Vec3(1.5, 2.0, 1.5));
         ((ZombieTestInvoker) zombie).entityCollisionOptimizer$startUnderWaterConversion(0);
         helper.runAfterDelay(5, () -> {
@@ -38,8 +40,8 @@ public final class CollisionContractGameTests {
         });
     }
 
-    @GameTest(maxTicks = 20)
-    public void hoglinConversionLifecycle(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 20)
+    public static void hoglinConversionLifecycle(GameTestHelper helper) {
         Hoglin hoglin = helper.spawn(EntityType.HOGLIN, new Vec3(1.5, 2.0, 1.5));
         hoglin.setTimeInOverworld(300);
         helper.runAfterDelay(5, () -> {
@@ -48,14 +50,14 @@ public final class CollisionContractGameTests {
         });
     }
 
-    @GameTest(maxTicks = 200)
-    public void emptyWorldSpawnQuery(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200)
+    public static void emptyWorldSpawnQuery(GameTestHelper helper) {
         org.edtp.entitycollisionoptimizer.natives.NativeHardQueryChecks.emptyWorld(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void nativeMovementContract(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void nativeMovementContract(GameTestHelper helper) {
         NativeVoxelParity.edges(helper);
         SingleCellParity.verify(helper);
         org.edtp.entitycollisionoptimizer.natives.MovementPublicationChecks.verify(helper);
@@ -66,38 +68,38 @@ public final class CollisionContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void positionWriteParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void positionWriteParity(GameTestHelper helper) {
         PositionWriteParity.verify(helper);
         org.edtp.entitycollisionoptimizer.natives.PositionMirrorChecks.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void nativeQueryContract(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void nativeQueryContract(GameTestHelper helper) {
         org.edtp.entitycollisionoptimizer.natives.NativeQueryChecks.verify(helper);
         org.edtp.entitycollisionoptimizer.natives.VerticalIndexChecks.verify(helper);
         org.edtp.entitycollisionoptimizer.natives.NativeHardQueryChecks.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void orderedNativeIndexParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void orderedNativeIndexParity(GameTestHelper helper) {
         OrderedCandidateParity.verify(helper);
         org.edtp.entitycollisionoptimizer.natives.NativeOrderChecks.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void sharedBodyStateParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void sharedBodyStateParity(GameTestHelper helper) {
         BodyFieldConsumerCoverage.verify();
         SyncStateParity.verify(helper);
         PushStateParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void nativePushRunParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void nativePushRunParity(GameTestHelper helper) {
         NativePushRunParity.verify(helper);
         PushRunBoundaryParity.verify(helper);
         PersistentBodyParity.verify(helper);
@@ -106,104 +108,104 @@ public final class CollisionContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void playerInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void playerInteractions(GameTestHelper helper) {
         PlayerInteractionParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void mixedEntityInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void mixedEntityInteractions(GameTestHelper helper) {
         MixedEntityInteractionParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void thrownProjectiles(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void thrownProjectiles(GameTestHelper helper) {
         ProjectileInteractionParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void explosionInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void explosionInteractions(GameTestHelper helper) {
         ExplosionInteractionParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void tntCannonInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void tntCannonInteractions(GameTestHelper helper) {
         TntCannonParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void machineClearances(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void machineClearances(GameTestHelper helper) {
         MachineClearanceParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void fluidInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void fluidInteractions(GameTestHelper helper) {
         FluidInteractionParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void irregularInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void irregularInteractions(GameTestHelper helper) {
         IrregularMovementParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void surfaceInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void surfaceInteractions(GameTestHelper helper) {
         SurfaceInteractionParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void pistonInteractions(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void pistonInteractions(GameTestHelper helper) {
         PistonInteractionParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void liveTeamContract(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void liveTeamContract(GameTestHelper helper) {
         CollisionContractParity.teams(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void orderedEntityContract(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void orderedEntityContract(GameTestHelper helper) {
         CollisionContractParity.order(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void entitySectionQueryContract(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void entitySectionQueryContract(GameTestHelper helper) {
         EntityQueryParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void canonicalVelocityContract(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void canonicalVelocityContract(GameTestHelper helper) {
         CollisionContractParity.visibility(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void orderedBlockShapes(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void orderedBlockShapes(GameTestHelper helper) {
         BlockShapeParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void blockMovementParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void blockMovementParity(GameTestHelper helper) {
         BlockMovementParity.verify(helper);
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void impulseObservationParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void impulseObservationParity(GameTestHelper helper) {
         CollisionImpulseParity.verify(helper);
         NativeImpulseParity.verify(helper);
         PushBatchParity.verify(helper);
@@ -213,8 +215,8 @@ public final class CollisionContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void lowDensityVanillaParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void lowDensityVanillaParity(GameTestHelper helper) {
         CollisionParity.verifyLowDensity(helper);
         EntityCollisionOptimizer.LOGGER.info(
                 "ECO_PARITY_RESULT density=low dispatch_pairs=32 state_transitions=11 repeated_frames=4 result=passed"
@@ -222,8 +224,8 @@ public final class CollisionContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void mediumDensityVanillaParity(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void mediumDensityVanillaParity(GameTestHelper helper) {
         CollisionParity.verifyMediumDensity(helper);
         EntityCollisionOptimizer.LOGGER.info(
                 "ECO_PARITY_RESULT density=medium groups=2 entity_counts=20,24 result=passed"
@@ -231,8 +233,8 @@ public final class CollisionContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 200, padding = 48)
-    public void concurrentLevelIsolation(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 200, padding = 48)
+    public static void concurrentLevelIsolation(GameTestHelper helper) {
         CollisionParity.verifyConcurrentLevelIsolation(helper);
         EntityCollisionOptimizer.LOGGER.info(
                 "ECO_PARITY_RESULT dimensions=3 concurrent_queries=13500 native_batches=4500 result=passed"
@@ -240,8 +242,8 @@ public final class CollisionContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 800, padding = 48, environment = "entity_collision_optimizer:chunk_load")
-    public void chunkLoadBoundaries(GameTestHelper helper) {
+    @GameTestSpec(maxTicks = 800, padding = 48, environment = "entity_collision_optimizer:chunk_load")
+    public static void chunkLoadBoundaries(GameTestHelper helper) {
         ChunkLoadParity.verify(helper);
     }
 }

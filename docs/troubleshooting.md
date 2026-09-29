@@ -80,8 +80,73 @@ Caused by: java.lang.IllegalArgumentException: FML service does not currently su
 
 `needsSync`/`noPhysics` 没有被改写成 `CollisionBodyAccess` 访问器时不会报错，只会读到已经过期
 的 Java 字段（body 表里才是当前值），表现为难以复现的碰撞行为偏差。因此 `BodyFieldAccess` 在无法
-判定归属时留下 WARN 日志，`src/gametest` 里的 `BodyFieldConsumerCoverage`（待移植）负责完整审计
-声明的消费者清单。
+判定归属时留下 WARN 日志，`src/gametest` 里的 `BodyFieldConsumerCoverage` 已在契约套件的
+`unit_shared_body_state_parity` 里跑起来，负责完整审计声明的消费者清单。
+
+## GameTest
+
+### 测试源集不会被自动发现
+
+Fabric 靠 `fabric.mod.json` 的 `fabric-gametest` 入口点主动加载测试类；NeoForge 26.x 没有这个机制，
+GameTest 是数据驱动的（`TEST_FUNCTION` + `TEST_INSTANCE` 两个注册表）。因此每个套件都有一份
+**索引资源**（`entity_collision_optimizer/gametest-index.json` 等）列出"跑哪些方法"，
+主源集的 `gametest.harness.GameTestRegistration` 在 mod 构造期按名字反射注册。
+
+删掉索引里的一行 = 那个用例静默消失。索引与方法上的 `@GameTestSpec` 不一致时启动即抛异常，
+这是刻意的：宁可起不来，也不要少跑一个契约。
+
+### 测试源集的依赖要自己挂
+
+MDG 只把 Minecraft/NeoForge 依赖加到 `sourceSets.main`。`gametest` / `unitTest` /
+`integrationTestShared` / `integrationTest` 这些源集必须各调一次
+`neoForge.addModdingDependenciesTo(sourceSets.<名字>)`，否则报
+`package net.minecraft.world.level.block.state does not exist`。
+
+测试类要读主模组内部状态，所以再加一条 `<name>CompileOnly sourceSets.main.output`——用
+`compileOnly` 而不是 `implementation`，因为开发运行时主模组的类是同一个类加载器提供的，
+打进测试源集只会制造重复类。
+
+### Identifier 不允许驼峰
+
+测试实例 id 取自方法名，而 `Identifier` 路径只允许 `[a-z0-9/._-]`。`GameTestRegistration`
+把方法名转成 snake_case 并加套件前缀（`unit_` / `integration_` / `benchmark_`），
+于是 `--tests entity_collision_optimizer:unit_*` 能按套件选择。
+
+### 同一批测试是并发跑的
+
+NeoForge 会把同一批测试并发放到共享世界里跑，每个实例一个独立的静态状态副本。上游 Fabric 侧
+`IntegrationSequence` 用一个全局布尔表示"某个场景跑完了"，在 NeoForge 下第二个场景永远读到
+`false`，只能等到超时（日志里是 `Didn't succeed or fail within N ticks`）。已改成按场景名记账。
+
+同一原因导致 `unit_entity_section_query_contract` 偶发失败：它的固定装置放在主世界低位坐标，
+参考查询偶尔会看到别的实例放在附近的实体。重跑即可通过，属测试隔离问题而非等价性失败。
+
+### vanilla 对照子工程
+
+`vanilla-gametest/` 是独立的 ModDevGradle 构建（有自己的 `settings.gradle`，用
+`gradlew -p vanilla-gametest ...` 调用），它必须真的没有优化器：
+
+- 它自己编译一份 `gametest.harness` 源码。**不要**改成引用主工程的 `build/classes/java/main`：
+  那两个类会被系统类加载器先加载，而 `DeferredRegister` 在 NeoForge 的 `TRANSFORMER` 加载器里，
+  两边对不上会抛 `LinkageError: loader constraint violation`。
+- 主工程的 `src/main/java` 虽然整目录加入，但 `compileJava` 显式排除了 `collision/`、
+  `natives/`、`mixin/`、`commands/`、`@Mod` 类与事件类。
+- 主工程的 `src/main/resources` 不参与运行期资源：它的 `entity_collision_optimizer.mixins.json`
+  会把优化器的 mixin 插件拉起来。
+
+### 注册表未引导（Not bootstrapped）
+
+症状：vanilla 对照进程启动即 FATAL
+
+```text
+java.lang.IllegalArgumentException: Not bootstrapped (called from registry minecraft:game_event)
+    at net.minecraft.core.registries.BuiltInRegistries.<clinit>(BuiltInRegistries.java:176)
+```
+
+`GameTestMainUtil` 的顺序是 `ServerModLoader.load()` → 各 mod 构造 → `Bootstrap.bootStrap()`。
+主工程里 NeoForge 自己会在构造期间触发引导，但只加载测试入口的对照工程里，
+`BuiltInRegistries` 可能先被这条注册链路拉起来。`GameTestRegistration.createFunctionRegister()`
+因此显式先调 `Bootstrap.bootStrap()`（已引导时是空操作）。
 
 ## 构建
 
@@ -108,4 +173,6 @@ wrapper 指向 Gradle 9.5.1，首次运行要从 services.gradle.org 拉约 130 
 | 每 tick 碰撞帧 | `ServerLevelMixin` 注入 `tick` | `LevelTickEvent.Pre/Post` |
 | 切换游戏模式失效 | `ServerPlayerMixin` 注入 `setGameMode` | `PlayerEvent.PlayerChangeGameModeEvent` |
 | 字段消费者清单 | 含 `carpet.script.*`、`mod.fuji.*` | 已删除（NeoForge 无这两个模组） |
-| 单元/集成/压测套件 | `runGameTest -PunitTest/-PintegrationTest/-Pbenchmark` | 待移植，见 [TESTING.md](../TESTING.md) |
+| 单元/集成/压测套件 | `runGameTest -PunitTest/-PintegrationTest/-Pbenchmark` | 三套均已移植：`runGameTestUnit` / `runGameTestIntegration` / `runGameTestBenchmark`，见 [TESTING.md](../TESTING.md) |
+| 测试类发现 | `fabric-gametest` 入口点自动加载 | 数据驱动 GameTest + 每套一份索引资源，见下节 |
+| 每 tick 服务器事件 | `ServerTickEvents.START/END_SERVER_TICK` | `ServerTickEvent.Pre/Post` |

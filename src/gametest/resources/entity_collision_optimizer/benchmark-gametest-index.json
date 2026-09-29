@@ -1,0 +1,8 @@
+{
+  "comment": "基准套件索引。这些用例只在 -Dentity_collision_optimizer.runBenchmark=true 时真正测速，否则立即通过；它们不属于正确性证据。",
+  "tests": [
+    { "method": "ZombieCollisionBenchmark.fallingZombies", "maxTicks": 500, "padding": 96 },
+    { "method": "ElderGuardianBenchmark.voidPipe", "maxTicks": 1600, "padding": 96 },
+    { "method": "ClimbingCollisionBenchmark.denseScaffolding", "maxTicks": 1800, "padding": 16 }
+  ]
+}

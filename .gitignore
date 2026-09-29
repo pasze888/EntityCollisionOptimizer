@@ -3,6 +3,7 @@
 /build/
 /vanilla-gametest/.gradle/
 /vanilla-gametest/build/
+/vanilla-gametest/run/
 /dist/
 /build/classes/java/main/
 /run/

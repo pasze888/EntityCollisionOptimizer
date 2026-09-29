@@ -1,0 +1,7 @@
+{
+  "comment": "集成套件索引：与 gametest-index.json 同构，但环境换成 integration、tick 上限更高。",
+  "tests": [
+    { "method": "ZombieCrammingIntegrationGameTests.crowdedChamberMatchesVanilla", "maxTicks": 400, "padding": 48, "environment": "entity_collision_optimizer:integration" },
+    { "method": "TntCrowdIntegrationGameTests.tntExplosionInZombieCrowdMatchesVanilla", "maxTicks": 1000, "padding": 48, "environment": "entity_collision_optimizer:integration" }
+  ]
+}

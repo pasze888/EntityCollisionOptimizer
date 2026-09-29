@@ -1,6 +1,6 @@
 package org.edtp.entitycollisionoptimizer.integration;
 
-import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import org.edtp.entitycollisionoptimizer.gametest.harness.GameTestSpec;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -34,12 +34,13 @@ public final class TntCrowdIntegrationGameTests {
     private static final long GAME_TIME = 1_000L;
     private static final Vec3 SCENE_ORIGIN = new Vec3(-5_909_900.0, -57.0, -9_908_000.0);
 
-    @GameTest(
+    @GameTestSpec(
             maxTicks = 1000,
             padding = 48,
             environment = "entity_collision_optimizer:integration"
     )
-    public void tntExplosionInZombieCrowdMatchesVanilla(GameTestHelper helper) {
+    public static void tntExplosionInZombieCrowdMatchesVanilla(GameTestHelper helper) {
+        // 跨进程对照：vanilla 进程录 trace，本进程逐字节比对（见 CrossProcessTrace）。
         ScenarioRun run = new ScenarioRun(helper);
         helper.onEachTick(run::captureTick);
     }
@@ -83,7 +84,7 @@ public final class TntCrowdIntegrationGameTests {
 
         private void captureTick() {
             if (finished) return;
-            if (!IntegrationSequence.isCrammingComplete()) return;
+            if (!IntegrationSequence.isComplete(IntegrationSequence.ZOMBIE_CRAMMING)) return;
             try {
                 if (!prepared) {
                     start();

@@ -45,15 +45,50 @@ repositories {
     mavenCentral()
 }
 
-def unitTestsEnabled = providers.gradleProperty("unitTest").isPresent()
-def integrationTestsEnabled = providers.gradleProperty("integrationTest").isPresent()
 def benchmarksEnabled = providers.gradleProperty("benchmark").isPresent()
-def enabledTestSuites = ((unitTestsEnabled ? 1 : 0)
-        + (integrationTestsEnabled ? 1 : 0)
-        + (benchmarksEnabled ? 1 : 0))
 
-if (enabledTestSuites > 1) {
-    throw new GradleException("Choose exactly one GameTest suite: unitTest, integrationTest, or benchmark")
+// 上游用 -PunitTest / -PintegrationTest 让 Loom 的 runGameTest 选套件；这里套件由 run 任务本身
+// 决定（runGameTestUnit / runGameTestIntegration / runGameTestBenchmark），那两个属性不再产生任何
+// 效果。它们很可能是 CI 或脚本传进来的，静默忽略等于"以为跑了其实没跑"，所以直接失败。
+["unitTest", "integrationTest"].each { legacyProperty ->
+    if (providers.gradleProperty(legacyProperty).isPresent()) {
+        throw new GradleException(
+                "-P${legacyProperty} 在本分支无效。请改用对应的 run 任务："
+                        + "runGameTestUnit / runGameTestIntegration / runGameTestBenchmark。"
+                        + "基准套件另外需要 -Pbenchmark。")
+    }
+}
+
+// Fabric 用三个 Loom 子项目分别承载契约、跨进程集成与基准测试；NeoForge 这边改为同一工程内的
+// 源集：gametest 是公共测试代码与 mixin，unitTest / benchmarkTest 各带自己的测试实例清单。
+// 它们都不进入发布产物：只有 processResources / jar 所属的 main 会被打包。
+// 用 Gradle 的默认目录约定（<name>/java、<name>/resources），不要再 srcDir 一遍：
+// 自定义源集只是加一个根，默认布局仍然是 src/<name>/java 与 src/<name>/resources。
+sourceSets {
+    gametest
+    unitTest
+    integrationTestShared
+    integrationTest
+}
+
+// 集成套件的场地/追踪代码要与 vanilla 对照工程共用：两边都把同一个目录加进主源集，
+// 保证录基线的那份字节码和比对时的那份完全一致。
+configurations {
+    integrationTestImplementation.extendsFrom integrationTestSharedImplementation
+}
+
+// 基准测试源集留到移植 benchmark 套件时再加：现在 src/benchmarkTest 只有元数据，没有 java。
+// sourceSets { benchmarkTest { java.srcDir 'src/benchmarkTest/java'; resources.srcDir 'src/benchmarkTest/resources' } }
+
+configurations {
+    integrationTestImplementation.extendsFrom integrationTestSharedImplementation
+}
+
+// 测试代码要读主模组内部状态（mixin invoker、native 契约），必须看到 main 的编译产物。
+// 用 compileOnly 而非 implementation：主模组的类在开发运行时由同一个类加载器提供，
+// 打进测试源集反而会制造重复类。
+['gametest', 'unitTest', 'integrationTestShared', 'integrationTest'].each { testSourceSetName ->
+    dependencies.add("${testSourceSetName}CompileOnly", sourceSets.main.output)
 }
 
 java {
@@ -75,6 +110,17 @@ dependencies {
     }
 }
 
+// 手工调试时可用 -PgametestArgs="--tests entity_collision_optimizer:foo" 只跑一部分用例。
+def gametestArgs = providers.gradleProperty("gametestArgs")
+        .map { it.split(' ').findAll { arg -> !arg.isEmpty() }.toList() }
+        .orElse([] as List<String>)
+
+// 跨进程对照的 trace 目录：vanilla 子工程录基线，本工程按同一路径比对。
+// 默认落在 build/ 下（gitignore 已覆盖），可用 -PintegrationTraceDir=<绝对路径> 覆盖。
+def gateTraceDir = providers.gradleProperty("integrationTraceDir")
+        .map { file(it).absolutePath }
+        .getOrElse(layout.buildDirectory.dir('gametest-traces').get().asFile.absolutePath)
+
 neoForge {
     version = project.neo_version
 
@@ -86,9 +132,35 @@ neoForge {
             server()
             programArgument '--nogui'
         }
+        // 跑全部已注册的测试实例；用 -PgametestArgs='--tests <选择器>' 只跑一部分。
         gameTestServer {
             type = 'gameTestServer'
-            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            programArguments.addAll(gametestArgs)
+        }
+        // 契约/单元套件。
+        gameTestUnit {
+            type = 'gameTestServer'
+            programArgument '--tests'
+            programArgument "${project.mod_id}:unit_*"
+        }
+        // 基准套件：只在 -Pbenchmark 时真正测速（否则用例立即通过，不产生数字）。
+        gameTestBenchmark {
+            type = 'gameTestServer'
+            jvmArgument "-Dentity_collision_optimizer.gametest.suite=benchmark"
+            if (benchmarksEnabled) {
+                jvmArgument '-Dentity_collision_optimizer.runBenchmark=true'
+            }
+            programArgument '--tests'
+            programArgument "${project.mod_id}:benchmark_*"
+        }
+        // 跨进程集成套件：与 vanilla 基线逐字节比对（基线由 vanilla-gametest 子工程录制）。
+        gameTestIntegration {
+            type = 'gameTestServer'
+            jvmArgument "-Dentity_collision_optimizer.gametest.suite=integration"
+            jvmArgument "-Dentity_collision_optimizer.integration.mode=compare"
+            jvmArgument "-Dentity_collision_optimizer.integration.trace_dir=${gateTraceDir}"
+            programArgument '--tests'
+            programArgument "${project.mod_id}:integration_*"
         }
         configureEach {
             // FFM 需要显式开启原生访问。FML 把 mod 放进子 ModuleLayer，
@@ -113,9 +185,22 @@ neoForge {
         }
     }
 
+    // MDG 只给 main 自动挂 Minecraft/NeoForge 依赖，测试源集要自己声明一次；
+    // 同一份 userdev 构件已由 main 拉取，这里只是把它加到测试的编译/运行时类路径上。
+    addModdingDependenciesTo(sourceSets.gametest)
+    addModdingDependenciesTo(sourceSets.unitTest)
+    addModdingDependenciesTo(sourceSets.integrationTestShared)
+    addModdingDependenciesTo(sourceSets.integrationTest)
+
+    // 测试实例由测试源集提供：gametest 是公共测试代码与 mixin，unitTest 带自己那份清单。
+    // 它们不参与 jar 打包，只在开发运行时进入 mod 的类路径。
     mods {
         "${project.mod_id}" {
             sourceSet(sourceSets.main)
+            sourceSet(sourceSets.gametest)
+            sourceSet(sourceSets.unitTest)
+            sourceSet(sourceSets.integrationTestShared)
+            sourceSet(sourceSets.integrationTest)
         }
     }
 }

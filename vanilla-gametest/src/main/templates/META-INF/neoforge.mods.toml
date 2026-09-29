@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="entity_collision_optimizer"
+version="${mod_version}"
+displayName="Entity Collision Optimizer Integration Baseline"
+authors="neoforge port harness"
+description='''
+Vanilla-only GameTest process used to record the cross-process integration baseline.
+It loads no optimizer code; only the shared GameTest registration harness.
+'''
+
+[[dependencies.entity_collision_optimizer]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="SERVER"
+
+[[dependencies.entity_collision_optimizer]]
+    modId="minecraft"
+    type="required"
+    versionRange="[${minecraft_version},)"
+    ordering="NONE"
+    side="SERVER"

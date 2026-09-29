@@ -1,55 +1,117 @@
+// vanilla 对照进程：不依赖 Entity Collision Optimizer 本体，只复刻主工程的 GameTest 接线，
+// 为跨进程集成场景录下"原版行为"基线。集成测试随后在主工程里逐字节比对。
+//
+// 复用主工程已编译的 #harness 包与测试类，避免两份注册逻辑各自漂移：
+//   - 主工程 build/classes/java/main                  → GameTestRegistration / GameTestSpec
+//   - ../src/integrationTest/java                      → 两个集成场景
+//   - ../src/integrationTestShared/resources           → 测试环境定义
+//   - ../src/integrationTest/resources                 → 集成套件索引
 plugins {
-    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.146'
 }
 
-version = '1.0.0'
-group = 'org.edtp'
+def modId = 'entity_collision_optimizer'
+def workspaceRoot = file('..')
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+}
 
 repositories {
     mavenCentral()
 }
 
-dependencies {
-    minecraft "com.mojang:minecraft:${minecraft_version}"
-    implementation "net.fabricmc:fabric-loader:${loader_version}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+    options.encoding = 'UTF-8'
 }
 
-sourceSets.main.java.srcDir(file('../src/integrationTest/java'))
-sourceSets.main.resources.srcDir(file('../src/integrationTestShared/resources'))
-
-fabricApi {
-    configureTests {
-        createSourceSet = false
-        enableGameTests = true
-        enableClientGameTests = false
-        eula = true
-        clearRunDirectory = true
-    }
+// src/main/java 整目录加进来只是为了 harness 那两个类；其余包（优化器本体）必须在 vanilla
+// 进程里彻底缺席，否则"没有优化器"这个前提就没了。
+tasks.named('compileJava', JavaCompile) {
+    exclude 'org/edtp/entitycollisionoptimizer/collision/**'
+    exclude 'org/edtp/entitycollisionoptimizer/commands/**'
+    exclude 'org/edtp/entitycollisionoptimizer/mixin/**'
+    exclude 'org/edtp/entitycollisionoptimizer/natives/**'
+    exclude 'org/edtp/entitycollisionoptimizer/gametest/*.java'
+    exclude 'org/edtp/entitycollisionoptimizer/EntityCollisionOptimizer.java'
+    exclude 'org/edtp/entitycollisionoptimizer/CollisionOptimizerEvents.java'
 }
 
-def integrationTraceDir = file('../build/gametest-baselines')
+// 主工程的 src/main/resources 只借编译期可见性，不参与本进程的运行时资源：
+// 它的 entity_collision_optimizer.mixins.json 会拉起优化器的 mixin 插件，
+// 而 vanilla 进程必须完全没有优化器。
 
-loom {
-    runs {
-        configureEach {
-            property 'entity_collision_optimizer.integration.mode', 'record'
-            property 'entity_collision_optimizer.integration.trace_dir', integrationTraceDir.absolutePath
+sourceSets {
+    main {
+        java {
+            srcDir workspaceRoot.toPath().resolve('src/integrationTest/java')
+            // harness（GameTestRegistration / GameTestSpec）必须在本工程里自己编译一份：
+            // 若改用主工程 build/classes 目录，这两个类会被系统类加载器先加载，
+            // 而 DeferredRegister 在 NeoForge 的 TRANSFORMER 加载器里，两边对不上会 LinkageError。
+            // 主源集的其它包（优化器本体）不进 vanilla 进程。
+            srcDir workspaceRoot.toPath().resolve('src/main/java').toFile()
+        }
+        resources {
+            srcDir workspaceRoot.toPath().resolve('src/integrationTestShared/resources')
+            srcDir workspaceRoot.toPath().resolve('src/integrationTest/resources')
+            // 测试用的平坦世界预设属于 gametest 源集；对照进程必须用同一个世界形态。
+            srcDir workspaceRoot.toPath().resolve('src/gametest/resources')
         }
     }
 }
 
-tasks.named('runGameTest') {
-    doFirst {
-        delete integrationTraceDir
-        delete layout.buildDirectory.dir('run/gameTest/world')
+def traceDir = providers.gradleProperty('integrationTraceDir')
+        .map { file(it).absolutePath }
+        .getOrElse(workspaceRoot.toPath().resolve('build/gametest-traces').toString())
+
+neoForge {
+    version = project.neo_version
+
+    runs {
+        gameTestServer {
+            type = 'gameTestServer'
+            // 该进程没有优化器，因此直接进入 record 模式。
+            jvmArgument '-Dentity_collision_optimizer.gametest.suite=integration'
+            jvmArgument '-Dentity_collision_optimizer.integration.mode=record'
+            jvmArgument "-Dentity_collision_optimizer.integration.trace_dir=${traceDir}"
+            programArgument '--tests'
+            programArgument "${modId}:integration_*"
+        }
+        configureEach {
+            jvmArgument '--enable-native-access=ALL-UNNAMED'
+            logLevel = org.slf4j.event.Level.INFO
+        }
+    }
+
+    mods {
+        "${modId}-vanilla-gametest" {
+            sourceSet(sourceSets.main)
+        }
     }
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.release = 25
+// 模板里的占位符要展开；与主工程一样显式 UTF-8，避免 GBK 平台写出非法 UTF-8 的 toml。
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    var replaceProperties = [
+            minecraft_version: project.minecraft_version,
+            neo_version      : project.neo_version,
+            mod_version      : '1.0.0',
+    ]
+    inputs.properties replaceProperties
+    filteringCharset = 'UTF-8'
+    expand replaceProperties
+    from 'src/main/templates'
+    into 'build/generated/sources/modMetadata'
 }
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
 
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(25)
+// 对照进程必须每次从干净的世界与基线开始，否则 record 出来的 trace 会混进上一次的残留。
+tasks.named('runGameTestServer') {
+    doFirst {
+        delete file(traceDir)
+        delete layout.buildDirectory.dir('run/gametestserver')
+    }
 }
