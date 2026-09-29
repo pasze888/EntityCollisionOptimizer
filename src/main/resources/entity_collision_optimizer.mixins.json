@@ -21,7 +21,6 @@
     "PlayerTeamMixin",
     "PalettedContainerMixin",
     "ScoreboardMixin",
-    "ServerPlayerMixin",
     "PersistentEntitySectionManagerAccessor",
     "ServerLevelAccessor",
     "ServerLevelMixin"

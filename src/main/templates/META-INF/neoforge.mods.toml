@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+issueTrackerURL="https://github.com/water2004/EntityCollisionOptimizer/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="${mod_authors}"
+logoFile="assets/entity_collision_optimizer/icon.png"
+credits="NeoForge port of the original Fabric mod by water2004."
+description='''
+Accelerates server-side entity collisions while preserving vanilla behavior.
+Vanilla entities produce the same candidates in the same order, run the same
+collision rules, and publish each velocity or movement update at the same point.
+'''
+
+[[mixins]]
+config="entity_collision_optimizer.mixins.json"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"

@@ -108,6 +108,14 @@ def prepareNativeResources = tasks.register("prepareNativeResources") {
     }
 }
 
-// Make the native libraries available both to the packaged JAR and Loom dev runs.
-// They are generated outputs, not source resources, so they stay out of sourcesJar.
-sourceSets.main.output.dir(generatedNativeResources, builtBy: prepareNativeResources)
+// native 资源有三种来源，优先级从高到低：
+//   1. -PnativePrebuiltDir=<dir>（默认 native/prebuilt）里已有 natives/<platform>/<lib>：直接作为资源根，跳过工具链；
+//   2. -PskipNative：显式跳过 native 构建（此时 jar 内没有 native，FFM 初始化会按设计失败）；
+//   3. 否则按上游流程下载交叉编译工具链，构建 win/linux/macos 三个平台。
+// 预编译目录与 out/ 一样被 .gitignore 覆盖，只用于本地开发。
+def prebuiltNativeRoot = file(providers.gradleProperty("nativePrebuiltDir").getOrElse("native/prebuilt"))
+if (new File(prebuiltNativeRoot, "natives").isDirectory()) {
+    sourceSets.main.resources.srcDir prebuiltNativeRoot
+} else if (!providers.gradleProperty("skipNative").isPresent()) {
+    sourceSets.main.output.dir(generatedNativeResources, builtBy: prepareNativeResources)
+}

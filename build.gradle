@@ -1,6 +1,7 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'java-library'
     id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.146'
 }
 
 def releaseVersion = providers.gradleProperty("releaseVersion")
@@ -55,79 +56,17 @@ if (enabledTestSuites > 1) {
     throw new GradleException("Choose exactly one GameTest suite: unitTest, integrationTest, or benchmark")
 }
 
-loom {
-    runs {
-        configureEach {
-            vmArg "--enable-native-access=ALL-UNNAMED"
-            if (providers.gradleProperty("gameTestFilter").isPresent()) {
-                vmArg "-Dfabric-api.gametest.filter=${providers.gradleProperty('gameTestFilter').get()}"
-            }
-            if (benchmarksEnabled) {
-                vmArg "-Dentity_collision_optimizer.runBenchmark=true"
-            }
-            if (providers.gradleProperty("jfrOutput").isPresent()) {
-                vmArg "-XX:StartFlightRecording=filename=${file(providers.gradleProperty("jfrOutput").get()).absolutePath},settings=profile,dumponexit=true"
-            }
-            // Optional local profiler only; never instrument Gradle or package this agent.
-            if (providers.gradleProperty("jitMapAgent").isPresent()) {
-                def agent = file(providers.gradleProperty("jitMapAgent").get()).absolutePath
-                def output = file(providers.gradleProperty("jitMapOutput").get()).absolutePath
-                vmArg "-agentpath:${agent}=${output}"
-            }
-        }
-    }
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(project.java_version)
+    withSourcesJar()
 }
 
-// Correctness suites and performance benchmarks are explicit; normal builds do not start a server.
-if (enabledTestSuites == 1) {
-    fabricApi {
-        configureTests {
-            createSourceSet = true
-            modId = "entity_collision_optimizer-gametest"
-            enableGameTests = true
-            eula = true
-            clearRunDirectory = true
-        }
-    }
-
-    if (integrationTestsEnabled) {
-        def integrationTraceDir = layout.buildDirectory.dir("gametest-baselines")
-        def recordVanillaIntegrationTrace = tasks.register("recordVanillaIntegrationTrace", GradleBuild) {
-            dir = file("vanilla-gametest")
-            tasks = ["runGameTest"]
-        }
-
-        sourceSets.gametest.java.setSrcDirs(["src/integrationTest/java"])
-        sourceSets.gametest.resources.setSrcDirs([
-                "src/integrationTest/resources",
-                "src/integrationTestShared/resources"
-        ])
-        loom.runs.named("gameTest") {
-            property "entity_collision_optimizer.integration.mode", "compare"
-            property "entity_collision_optimizer.integration.trace_dir", integrationTraceDir.get().asFile.absolutePath
-        }
-        tasks.named("runGameTest") {
-            dependsOn recordVanillaIntegrationTrace
-            doFirst {
-                // The generated cleanup task runs before the vanilla-recording dependency.
-                // Delete again at the actual optimized-process boundary so unit-test worlds
-                // cannot leak persistent chunks into the integration comparison.
-                delete layout.buildDirectory.dir("run/gameTest/world")
-            }
-        }
-    } else {
-        sourceSets.gametest.java.setSrcDirs(["src/gametest/java"])
-        sourceSets.gametest.resources.setSrcDirs([
-                "src/gametest/resources",
-                unitTestsEnabled ? "src/unitTest/resources" : "src/benchmarkTest/resources"
-        ])
-    }
+tasks.withType(JavaCompile).configureEach {
+    options.release = project.java_version as int
+    options.encoding = 'UTF-8'
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
     if (providers.gradleProperty("compatModsDir").isPresent()) {
         runtimeOnly fileTree(
                 dir: providers.gradleProperty("compatModsDir").get(),
@@ -136,32 +75,73 @@ dependencies {
     }
 }
 
-def modVersion = version.toString()
+neoForge {
+    version = project.neo_version
 
-processResources {
-    inputs.property "version", modVersion
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+            programArgument '--nogui'
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+        configureEach {
+            // FFM 需要显式开启原生访问；Java 25 仍允许，但会打印警告。
+            jvmArgument '--enable-native-access=ALL-UNNAMED'
+            if (benchmarksEnabled) {
+                jvmArgument '-Dentity_collision_optimizer.runBenchmark=true'
+            }
+            if (providers.gradleProperty("jfrOutput").isPresent()) {
+                jvmArgument "-XX:StartFlightRecording=filename=${file(providers.gradleProperty('jfrOutput').get()).absolutePath},settings=profile,dumponexit=true"
+            }
+            // 可选本地 profiler，仅用于手工实验；绝不打包或注入 Gradle 本身。
+            if (providers.gradleProperty("jitMapAgent").isPresent()) {
+                def agent = file(providers.gradleProperty("jitMapAgent").get()).absolutePath
+                def output = file(providers.gradleProperty("jitMapOutput").get()).absolutePath
+                jvmArgument "-agentpath:${agent}=${output}"
+            }
+            logLevel = org.slf4j.event.Level.INFO
+        }
+    }
 
-    filesMatching("fabric.mod.json") {
-        expand "version": modVersion
+    mods {
+        "${project.mod_id}" {
+            sourceSet(sourceSets.main)
+        }
     }
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.release = 25
+// 模板与产物统一按 UTF-8 处理：默认取平台字符集，GBK 下会把模板里的非 ASCII 内容写坏成非法 UTF-8 字节，
+// FML 解析 neoforge.mods.toml 失败时会报 "is not a valid mod file"。
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+    ]
+    inputs.properties replaceProperties
+    filteringCharset = 'UTF-8'
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
 }
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
 
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(25)
-    withSourcesJar()
-}
-
-def archiveBaseName = project.archives_base_name
-
-jar {
-    inputs.property "archiveBaseName", archiveBaseName
-
+tasks.named('jar', Jar) {
     from("LICENSE") {
-        rename { "${it}_${archiveBaseName}" }
+        rename { "${it}_${archives_base_name}" }
     }
 }
 

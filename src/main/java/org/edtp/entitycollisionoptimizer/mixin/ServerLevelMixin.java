@@ -7,39 +7,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.function.BooleanSupplier;
-
 @Mixin(ServerLevel.class)
 public abstract class ServerLevelMixin {
     @Inject(method = "<init>", at = @At("RETURN"))
-    /* Attach the entity storage to the server level after initialization */
+    /* 把实体存储绑定到它所属的 ServerLevel。NeoForge 无对应事件（ServerStartedEvent 覆盖不了运行期新建的维度），保留 mixin。
+       每 tick 的碰撞帧 begin/end 已改由 NeoForge 的 LevelTickEvent.Pre/Post 承担，见 CollisionOptimizerEvents。 */
     private void entityCollisionOptimizer$attachEntityStorage(CallbackInfo ci) {
         CollisionFrame.attach((ServerLevel) (Object) this);
     }
-
-    /** Begin a collision frame before entity ticking of each tick */
-    @Inject(
-            method = "tick(Ljava/util/function/BooleanSupplier;)V",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/entity/EntityTickList;forEach(Ljava/util/function/Consumer;)V"
-            )
-    )
-    private void entityCollisionOptimizer$beginCollisionFrame(
-            BooleanSupplier shouldKeepTicking,
-            CallbackInfo ci
-    ) {
-        ServerLevel self = (ServerLevel) (Object) this;
-        CollisionFrame.begin(self);
-    }
-
-    /** End the collision frame after the entire level tick */
-    @Inject(method = "tick(Ljava/util/function/BooleanSupplier;)V", at = @At("RETURN"))
-    private void entityCollisionOptimizer$endCollisionFrame(
-            BooleanSupplier shouldKeepTicking,
-            CallbackInfo ci
-    ) {
-        CollisionFrame.end((ServerLevel) (Object) this);
-    }
-
 }
