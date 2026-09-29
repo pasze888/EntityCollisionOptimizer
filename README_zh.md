@@ -4,13 +4,15 @@
 
 <h1 align="center">实体碰撞优化</h1>
 
-<p align="center">面向 Minecraft 26.1 Fabric 服务器的原版等价实体碰撞加速。</p>
+<p align="center">面向 Minecraft 26.1.2 NeoForge 服务器的原版等价实体碰撞加速。</p>
 
 <p align="center"><a href="README.md">English</a> | <strong>简体中文</strong></p>
 
 ---
 
-实体碰撞优化是面向 Minecraft 26.1 的服务端 Fabric 模组，通过 C++ native 后端加速实体查询、相互推动和移动碰撞，同时**保持原版实体碰撞行为**。安装即生效，连接服务器的客户端无需安装。
+实体碰撞优化是面向 Minecraft 26.1.2（NeoForge 26.1.2.99）的服务端 NeoForge 模组，通过 C++ native 后端加速实体查询、相互推动和移动碰撞，同时**保持原版实体碰撞行为**。安装即生效，连接服务器的客户端无需安装。
+
+本分支是 [water2004 的 Fabric 原版模组](https://github.com/water2004/EntityCollisionOptimizer) 的 NeoForge 移植；碰撞内核及其观测边界保持不变。
 
 ## 为什么使用实体碰撞优化？
 
@@ -69,9 +71,9 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 
 | 组件 | 要求 |
 | --- | --- |
-| Minecraft | 26.1 |
-| 模组加载器 | Fabric Loader 0.17.0 或更高版本 |
-| 依赖 | Fabric API 0.145.1 或更高的 26.1 兼容版本 |
+| Minecraft | 26.1.2 |
+| 模组加载器 | NeoForge 26.1.2.99 或 26.1.x 系列更高版本 |
+| 依赖 | 无；NeoForge 移植不使用 Fabric API |
 | Java | 25 |
 | 操作系统 | Windows、Linux 或 macOS |
 | 处理器 | 支持 AVX2 的 x86-64 处理器 |
@@ -80,15 +82,16 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 
 ## 安装
 
-1. 安装 Fabric Loader 和 Fabric API。
-2. 从 [GitHub Releases](https://github.com/water2004/EntityCollisionOptimizer/releases) 下载 Minecraft 26.1 对应的 JAR，放入实例的 `mods` 目录。
+1. 为 Minecraft 26.1.2 安装 NeoForge 26.1.2.99（或 26.1.x 系列更高版本）。
+2. 构建 JAR（见 [构建与测试](#构建与测试)），放入服务器的 `mods` 目录。上游 Fabric 版的发布页见 [GitHub Releases](https://github.com/water2004/EntityCollisionOptimizer/releases)。
 
-在本项目支持的 Java 25 上不需要添加任何 JVM 参数。Minecraft 26.1 官方启动器已经启用了 native access；手动启动的独立服务器如果没有该选项，Java 可能只在日志中输出一次 native access 警告，但 Java 25 仍会允许调用，模组可以正常工作。
+在本项目支持的 Java 25 上不需要添加任何 JVM 参数。NeoForge 把模组作为 JPMS 模块放进子 ModuleLayer，因此手动启动的独立服务器即使带上 `--enable-native-access=ALL-UNNAMED`，也可能只输出一次 native access 警告；Java 25 仍会允许调用，模组正常工作。
 
 希望消除这条警告的服务器管理员可以选择添加：
 
 ```text
 --enable-native-access=ALL-UNNAMED
+--enable-native-access=entity_collision_optimizer
 ```
 
 如果当前平台不受支持或 FFM 初始化失败，模组会明确报错，不会静默回退到其他实现。
@@ -99,8 +102,8 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 
 ## 兼容性
 
-- 可以与锂和 Carpet 一同安装。本模组启用时会接管重叠的服务端碰撞路径，而不是同时运行两套实现。
-- 本模组有意忽略 Carpet 的 `maxEntityCollisions` 上限；限制碰撞候选数量不属于本项目的职责。原版 `maxEntityCramming` 挤压伤害规则仍然生效。
+- 可以与同样接管服务端碰撞路径的优化模组（例如锂的 NeoForge 移植）一同安装。本模组启用时会接管重叠路径，而不是同时运行两套实现。
+- 限制碰撞候选数量不属于本项目的职责：候选永远不会被丢弃，原版 `maxEntityCramming` 挤压伤害规则仍然生效。
 - 不修改存档格式，也不注册需要同步到客户端的内容。
 - 当前以原版实体为兼容目标，不保证其他模组自定义实体或直接替换同一碰撞路径的实现能够正常工作。
 
@@ -112,18 +115,18 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 
 ```powershell
 ./gradlew.bat build
-./gradlew.bat runGameTest -PunitTest
-./gradlew.bat runGameTest -PintegrationTest
+./gradlew.bat runServer
+./gradlew.bat compileJava -PskipNative
 ```
 
-单元 GameTest 覆盖聚焦的碰撞契约和确定性边界条件。集成 GameTest 会先在不加载本模组的进程中运行真实场景，再在加载本模组的进程中运行，并要求两边轨迹逐字节一致。测试职责和命令详见 [TESTING.md](TESTING.md)。
+`build` 的产物在 `build/libs`。原生库优先取 `native/prebuilt/natives/<平台>/`（本地开发快捷路径，不入版本控制）；该目录不存在时才走上游交叉编译工具链（`./gradlew prepareNativeResources`，目前仅 Windows）。`-PskipNative` 只编译 Java、不触碰原生工具链，`-PnativePrebuiltDir=<目录>` 可指定其它预编译资源根目录。
 
-压测必须通过 `-Pbenchmark` 显式启用，普通构建不会启动压测服务器。可以使用 `-PcompatModsDir=<目录>` 为测试运行加入额外模组。
+Fabric 版的单元、跨进程集成与压测 GameTest 套件**尚未移植**；当前验证步骤与套件必须满足的契约见 [TESTING.md](TESTING.md)。
 
-构建包含全部原生平台的完整发布 JAR 目前需要 Windows；Linux 和 macOS 可以使用 `./gradlew compileJava` 检查 Java 源码。构建产物位于 `build/libs`，版本号和 tag 约定见 [RELEASE.md](RELEASE.md)。
+可以使用 `-PcompatModsDir=<目录>` 为开发运行加入额外模组。版本号和 tag 约定见 [RELEASE.md](RELEASE.md)，其中描述的仍是上游 Fabric 流程。
 
 ## 许可证
 
 实体碰撞优化使用 [MIT License](LICENSE)。
 
-致谢：本项目的灵感来自 [Accelerated Recoiling](https://github.com/wiyuka-owo/AcceleratedRecoiling)，但在目标和实现上均与其有很大区别。
+致谢：本项目的灵感来自 [Accelerated Recoiling](https://github.com/wiyuka-owo/AcceleratedRecoiling)，但在目标和实现上均与其有很大区别。NeoForge 移植位于本工作副本的 `neoforge/26.1.2` 分支；NeoForge 特有的构建、运行与原生工具链注意事项集中在 [docs/troubleshooting.md](docs/troubleshooting.md)。

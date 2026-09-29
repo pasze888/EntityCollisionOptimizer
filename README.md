@@ -4,13 +4,15 @@
 
 <h1 align="center">Entity Collision Optimizer</h1>
 
-<p align="center">Vanilla-accurate entity collision acceleration for Minecraft 26.1 Fabric servers.</p>
+<p align="center">Vanilla-accurate entity collision acceleration for Minecraft 26.1.2 NeoForge servers.</p>
 
 <p align="center"><strong>English</strong> | <a href="README_zh.md">简体中文</a></p>
 
 ---
 
-Entity Collision Optimizer is a server-side Fabric mod for Minecraft 26.1 that uses a C++ native backend to accelerate entity queries, pushing, and movement collision while **preserving vanilla entity-collision behavior**. Install it and it works; connecting clients do not need the mod.
+Entity Collision Optimizer is a server-side NeoForge mod for Minecraft 26.1.2 (NeoForge 26.1.2.99) that uses a C++ native backend to accelerate entity queries, pushing, and movement collision while **preserving vanilla entity-collision behavior**. Install it and it works; connecting clients do not need the mod.
+
+This branch is a NeoForge port of the original Fabric mod by [water2004](https://github.com/water2004/EntityCollisionOptimizer); the collision core and its observation boundaries are unchanged.
 
 ## Why use Entity Collision Optimizer?
 
@@ -69,9 +71,9 @@ The FFM boundary therefore carries a complete query, push run, or movement opera
 
 | Component | Requirement |
 | --- | --- |
-| Minecraft | 26.1 |
-| Mod loader | Fabric Loader 0.17.0 or newer |
-| Dependency | A Minecraft 26.1-compatible Fabric API 0.145.1 or newer |
+| Minecraft | 26.1.2 |
+| Mod loader | NeoForge 26.1.2.99 or newer on the 26.1.x line |
+| Dependency | None; the NeoForge port does not use Fabric API |
 | Java | 25 |
 | Operating system | Windows, Linux, or macOS |
 | Processor | x86-64 with AVX2 |
@@ -80,15 +82,16 @@ Release JARs contain native libraries for x86-64 Windows, Linux, and macOS. ARM6
 
 ## Installation
 
-1. Install Fabric Loader and Fabric API.
-2. Download the JAR for Minecraft 26.1 from [GitHub Releases](https://github.com/water2004/EntityCollisionOptimizer/releases) and place it in the instance's `mods` directory.
+1. Install NeoForge 26.1.2.99 (or a newer 26.1.x build) for Minecraft 26.1.2.
+2. Build the JAR (see [Building and testing](#building-and-testing)) and place it in the server's `mods` directory. The original Fabric releases live on [GitHub Releases](https://github.com/water2004/EntityCollisionOptimizer/releases).
 
-No additional JVM arguments are required on the supported Java 25 runtime. The official Minecraft 26.1 launcher already enables native access. A dedicated server started manually without that option may print Java's native-access warning once, but Java 25 still allows the operation and the mod continues to work.
+No additional JVM arguments are required on the supported Java 25 runtime. NeoForge loads mods as JPMS modules in a child module layer, so a manually started dedicated server may print one native-access warning even with `--enable-native-access=ALL-UNNAMED` present; Java 25 still allows the operation and the mod continues to work.
 
 Server administrators who want to suppress that warning may optionally add:
 
 ```text
 --enable-native-access=ALL-UNNAMED
+--enable-native-access=entity_collision_optimizer
 ```
 
 An unsupported native platform or an FFM initialization failure is reported as an error. The mod will not silently fall back to another implementation.
@@ -99,8 +102,8 @@ Use `/eco` to check whether the FFM backend initialized successfully. The mod ha
 
 ## Compatibility
 
-- Lithium and Carpet can be installed alongside Entity Collision Optimizer. When enabled, this mod owns the overlapping server collision paths instead of running both implementations.
-- Carpet's `maxEntityCollisions` limit is intentionally ignored. Limiting the number of collision candidates is outside this mod's scope. Vanilla's `maxEntityCramming` damage rule still applies.
+- Mods that own the same server collision paths (for example a NeoForge port of Lithium) can be installed alongside Entity Collision Optimizer. When enabled, this mod owns the overlapping paths instead of running both implementations.
+- Limiting collision candidates is outside this mod's scope: candidates are never dropped, and vanilla's `maxEntityCramming` damage rule still applies.
 - The mod does not change the save format or register content that must be synchronized to clients.
 - Vanilla entities are the compatibility target. Custom entities or mods that directly replace the same collision paths are not currently guaranteed to work.
 
@@ -112,18 +115,18 @@ Use Java 25 and the included Gradle Wrapper:
 
 ```powershell
 ./gradlew.bat build
-./gradlew.bat runGameTest -PunitTest
-./gradlew.bat runGameTest -PintegrationTest
+./gradlew.bat runServer
+./gradlew.bat compileJava -PskipNative
 ```
 
-Unit GameTests cover focused collision contracts and deterministic edge cases. Integration GameTests run real scenarios first without the mod and then with it, requiring byte-for-byte identical traces. See [TESTING.md](TESTING.md) for the suite boundaries and commands.
+`build` writes the JAR to `build/libs`. Native binaries are taken from `native/prebuilt/natives/<platform>/` when that directory exists (a development shortcut; it stays out of version control), otherwise the upstream cross-compilation toolchain is downloaded and used (`./gradlew prepareNativeResources`, currently Windows only). `-PskipNative` compiles Java without touching the native toolchain, and `-PnativePrebuiltDir=<dir>` points at another prebuilt resource root.
 
-Benchmarks are opt-in through `-Pbenchmark`; a normal build does not start a benchmark server. Use `-PcompatModsDir=<directory>` to add extra mods to a test run.
+The unit, cross-process integration, and benchmark GameTest suites of the Fabric version are **not ported yet**; see [TESTING.md](TESTING.md) for the current verification steps and the contract the suites must satisfy.
 
-Building a complete release JAR with all native targets currently requires Windows. On Linux or macOS, use `./gradlew compileJava` to check the Java sources. Build artifacts are written to `build/libs`; version and tag conventions are documented in [RELEASE.md](RELEASE.md).
+Use `-PcompatModsDir=<directory>` to add extra mods to a development run. Version and tag conventions are documented in [RELEASE.md](RELEASE.md), which still describes the upstream Fabric pipeline.
 
 ## License
 
 Entity Collision Optimizer is available under the [MIT License](LICENSE).
 
-Acknowledgements: This project was inspired by [Accelerated Recoiling](https://github.com/wiyuka-owo/AcceleratedRecoiling), but differs substantially in both its goals and implementation.
+Acknowledgements: This project was inspired by [Accelerated Recoiling](https://github.com/wiyuka-owo/AcceleratedRecoiling), but differs substantially in both its goals and implementation. The NeoForge port lives on the `neoforge/26.1.2` branch of this working copy; build, runtime, and native-toolchain notes specific to NeoForge are collected in [docs/troubleshooting.md](docs/troubleshooting.md).
