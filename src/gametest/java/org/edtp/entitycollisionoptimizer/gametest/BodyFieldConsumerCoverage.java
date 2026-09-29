@@ -33,21 +33,16 @@ final class BodyFieldConsumerCoverage {
                 }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
             } catch (java.io.IOException failure) { throw new AssertionError(failure); }
         }
-        int loaded = 0, absent = 0;
+        int loaded = 0;
         for (String target : targets) {
-            try { Class.forName(target, false, loader); loaded++; }
-            catch (ClassNotFoundException failure) {
-                boolean optionalAbsent = (target.startsWith("carpet.")
-                        && !net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("carpet"))
-                        || (target.startsWith("mod.fuji.")
-                        && !net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("fuji"));
-                if (!optionalAbsent) {
-                    throw new AssertionError("Declared field consumer missing: " + target, failure);
-                }
-                absent++;
+            try {
+                Class.forName(target, false, loader);
+                loaded++;
+            } catch (ClassNotFoundException failure) {
+                throw new AssertionError("Declared field consumer missing: " + target, failure);
             }
         }
         if (loaded == 0) throw new AssertionError("Empty field consumer inventory");
-        EntityCollisionOptimizer.LOGGER.info("ECO_BODY_FIELD_CONSUMERS loaded={} optional_absent={} result=passed", loaded, absent);
+        EntityCollisionOptimizer.LOGGER.info("ECO_BODY_FIELD_CONSUMERS loaded={} result=passed", loaded);
     }
 }

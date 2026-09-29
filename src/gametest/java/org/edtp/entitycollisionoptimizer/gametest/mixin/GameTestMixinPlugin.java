@@ -9,7 +9,8 @@ import java.util.Set;
 
 /** Diagnostic wrappers must not alter ordinary, non-diagnostic benchmark profiles. */
 public final class GameTestMixinPlugin implements IMixinConfigPlugin {
-    // Keep explicit implementations for Fabric Loader 0.19.3's Mixin ABI; newer defaults are not universal.
+    // Keep explicit implementations: sponge-mixin 0.17.3 / Mixin 0.8.7 (what FML ships) still
+    // declares every IMixinConfigPlugin method abstract.
     @Override public void onLoad(String mixinPackage) {}
     @Override public String getRefMapperConfig() { return null; }
     @Override public void acceptTargets(Set<String> mine, Set<String> others) {}

@@ -10,8 +10,8 @@ import java.util.Set;
 
 /** Runs after Mixin's accessor/injector phases, so merged field consumers share the same boundary. */
 public final class BodyMixinPlugin implements IMixinConfigPlugin {
-    // Do not remove: Mixin bundled with Fabric Loader 0.19.3 still declares these methods abstract.
-    // Loader 0.19.4+ supplies defaults, but this mod supports older loaders too.
+    // Do not remove: the mixin build NeoForge ships (sponge-mixin 0.17.3 / Mixin 0.8.7) still
+    // declares all seven IMixinConfigPlugin methods abstract, so they must be implemented here.
     @Override public void onLoad(String mixinPackage) {}
     @Override public String getRefMapperConfig() { return null; }
     @Override public boolean shouldApplyMixin(String target, String mixin) { return true; }

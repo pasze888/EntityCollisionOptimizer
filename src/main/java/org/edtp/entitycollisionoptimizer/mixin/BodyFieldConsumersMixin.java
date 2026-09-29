@@ -21,9 +21,6 @@ import org.spongepowered.asm.mixin.Pseudo;
         "net.minecraft.world.entity.AreaEffectCloud", "net.minecraft.world.entity.Display",
         "net.minecraft.world.entity.Interaction", "net.minecraft.world.entity.Marker", "net.minecraft.world.entity.OminousItemSpawner",
         "net.minecraft.world.entity.boss.enderdragon.EnderDragon", "net.minecraft.world.entity.decoration.ArmorStand",
-        "net.minecraft.world.entity.monster.Vex", "net.minecraft.world.entity.player.Player",
-        "carpet.script.utils.EntityTools", "carpet.script.value.EntityValue$2",
-        // Fuji widens Entity.position and reads it directly here.
-        "mod.fuji.core.auxiliary.minecraft.EntityHelper"
+        "net.minecraft.world.entity.monster.Vex", "net.minecraft.world.entity.player.Player"
 })
 public abstract class BodyFieldConsumersMixin {}
