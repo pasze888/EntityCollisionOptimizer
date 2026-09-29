@@ -11,8 +11,6 @@ import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.edtp.entitycollisionoptimizer.collision.EntitySectionStorageLevelBinding;
 import org.edtp.entitycollisionoptimizer.collision.CollisionCacheState;
-import org.edtp.entitycollisionoptimizer.mixin.PersistentEntitySectionManagerAccessor;
-import org.edtp.entitycollisionoptimizer.mixin.ServerLevelAccessor;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,14 +34,9 @@ public final class CollisionFrame {
     }
 
     public static void attach(ServerLevel level) {
-        /* Get the private entity manager for the server level, implemented in ServerLevelAccessor.java */
-        ServerLevelAccessor levelAccess =
-                (ServerLevelAccessor) (Object) level;
-        var entityManager = levelAccess.eco$entityManager();
-
-        PersistentEntitySectionManagerAccessor managerAccess =
-                (PersistentEntitySectionManagerAccessor) (Object) entityManager;
-        var sectionStorage = managerAccess.eco$sectionStorage();
+        /* entityManager and sectionStorage are widened to public by META-INF/accesstransformer.cfg. */
+        var entityManager = level.entityManager;
+        var sectionStorage = entityManager.sectionStorage;
 
         EntitySectionStorageLevelBinding storageBinding =
                 (EntitySectionStorageLevelBinding) (Object) sectionStorage;
@@ -52,10 +45,7 @@ public final class CollisionFrame {
 
     /** Bootstrap from the same per-section lists and visibility used by vanilla box queries. */
     static void forEachSectionEntity(ServerLevel level, Consumer<Entity> consumer) {
-        ServerLevelAccessor levelAccess = (ServerLevelAccessor) (Object) level;
-        PersistentEntitySectionManagerAccessor managerAccess =
-                (PersistentEntitySectionManagerAccessor) (Object) levelAccess.eco$entityManager();
-        var sectionStorage = managerAccess.eco$sectionStorage();
+        var sectionStorage = level.entityManager.sectionStorage;
         for (long chunkKey : sectionStorage.getAllChunksWithExistingSections()) {
             sectionStorage.getExistingSectionsInChunk(chunkKey)
                     .filter(section -> section.getStatus().isAccessible())

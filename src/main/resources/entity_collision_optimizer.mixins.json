@@ -21,8 +21,6 @@
     "PlayerTeamMixin",
     "PalettedContainerMixin",
     "ScoreboardMixin",
-    "PersistentEntitySectionManagerAccessor",
-    "ServerLevelAccessor",
     "ServerLevelMixin"
   ],
   "injectors": {
