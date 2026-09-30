@@ -24,9 +24,13 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
 
+      # 版本是硬约束：build.zig 与 src-zig 都按 Zig 0.16 的 API 写，不能漂到 0.17。
+      # 不用自建下载脚本：ziglang.org 偶发卡住时自建脚本会静默挂死（无输出、无超时），
+      # 这个 action 带重试与镜像回退。
       - name: Setup Zig 0.16.0
-        shell: pwsh
-        run: ./.github/scripts/setup-zig.ps1 -Version '0.16.0'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

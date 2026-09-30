@@ -50,9 +50,11 @@ jobs:
           java-version: "25"
           cache: gradle
 
+      # 与 build.yml 保持一致：版本锁 0.16.0，走 mlugg/setup-zig 而不是自建下载脚本。
       - name: Setup Zig 0.16.0
-        shell: pwsh
-        run: ./.github/scripts/setup-zig.ps1 -Version '0.16.0'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
 
       - name: Check release scripts
         shell: pwsh

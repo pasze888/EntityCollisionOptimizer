@@ -29,6 +29,10 @@ windows/linux/macos × x64/arm64 六个目标，不再需要 MSVC、CMake，也�
 原因：`PATH` 里没有 `zig`。修法：装 Zig 0.16.0，或用 `-PzigExecutable=<zig 可执行文件路径>` 指定。
 版本不能将就：`build.zig` 与 `src-zig` 都按 0.16 的 API 写，0.15 / 0.17 会编译不过。
 
+CI 上装 Zig 用 `mlugg/setup-zig@v2`（`version: 0.16.0`），不自己写下载脚本。曾用一段自建的
+PowerShell 下载脚本，遇到 ziglang.org 请求挂住时会**静默卡死**：步骤 12 分钟无任何输出，最后被人工取消。
+自建脚本没有超时也没有重试，而 action 两者都带，还支持镜像回退。
+
 Zig 的构建缓存被 `native-build.gradle` 固定到 `build/zig-cache/`（`--cache-dir` / `--global-cache-dir`），
 `TEMP`/`TMP` 也被改指 `build/zig-tmp/`。zig 默认写用户级缓存，子编译（交叉编译 mingw-w64 的
 `libmingw32.lib` 等）还会在 `TEMP` 下建临时文件；受限环境里这两处都可能不可写，固定到工作区内
