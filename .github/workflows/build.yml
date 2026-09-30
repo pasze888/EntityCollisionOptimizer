@@ -47,9 +47,19 @@ jobs:
       - name: Run cross-process integration GameTests
         run: ./gradlew runGameTestIntegration --stacktrace
 
+      - name: Compute artifact name
+        shell: pwsh
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          # 分支名可以带斜杠（neoforge/26.1.2），artifact 名称不允许，先替换成短横线。
+          $ref = $env:REF_NAME -replace '[^A-Za-z0-9._-]', '-'
+          "name=EntityCollisionOptimizer-$ref-build-${{ github.run_number }}" >> $env:GITHUB_OUTPUT
+        id: artifact-name
+
       - name: Upload Mod artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: EntityCollisionOptimizer-${{ github.ref_name }}-build-${{ github.run_number }}
+          name: ${{ steps.artifact-name.outputs.name }}
           path: build/libs/*.jar
           retention-days: 14

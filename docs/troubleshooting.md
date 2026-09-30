@@ -5,6 +5,20 @@
 
 ## 原生库
 
+### artifact 名称里的分支斜杠
+
+症状：CI 前面全绿，最后一步归档失败：
+
+```text
+##[error]The artifact name is not valid: EntityCollisionOptimizer-neoforge/26.1.2-build-1.
+Contains the following character: Forward slash /
+```
+
+原因：[build.yml](../.github/workflows/build.yml) 的 artifact 名用了 `github.ref_name`，而
+`actions/upload-artifact` 不允许名称里出现 `/ \ : * ? " < > |`。上游分支名（`26.1`、`main`）
+没有斜杠，所以只有本地的 `neoforge/26.1.2` 这类分支名会踩到。修法：归档前把 ref 名里不允许的
+字符替换成短横线。
+
 ### 原生库由 Zig 构建，需要 Zig 0.16.0
 
 [native-build.gradle](../native-build.gradle) 的 `zigBuildNative` 任务直接调用 `zig build`，一次编出
