@@ -5,37 +5,47 @@
 
 ## 原生库
 
-### 交叉编译工具链下载卡住
+### 原生库由 Zig 构建，需要 Zig 0.16.0
 
-症状：`./gradlew build` 停在配置阶段，控制台停在
+[native-build.gradle](../native-build.gradle) 的 `zigBuildNative` 任务直接调用 `zig build`，一次编出
+windows/linux/macos × x64/arm64 六个目标，不再需要 MSVC、CMake，也不再下载 AcceleratedRecoiling
+交叉编译工具链。
+
+症状：构建报 `找不到 zig 可执行文件。请安装 Zig 0.16.0 并确保它在 PATH 上`。
+原因：`PATH` 里没有 `zig`。修法：装 Zig 0.16.0，或用 `-PzigExecutable=<zig 可执行文件路径>` 指定。
+版本不能将就：`build.zig` 与 `src-zig` 都按 0.16 的 API 写，0.15 / 0.17 会编译不过。
+
+Zig 的构建缓存被 `native-build.gradle` 固定到 `build/zig-cache/`（`--cache-dir` / `--global-cache-dir`），
+`TEMP`/`TMP` 也被改指 `build/zig-tmp/`。zig 默认写用户级缓存，子编译（交叉编译 mingw-w64 的
+`libmingw32.lib` 等）还会在 `TEMP` 下建临时文件；受限环境里这两处都可能不可写，固定到工作区内
+就与外部环境无关，手工执行 `zig build` 时照抄这四组参数。
+
+症状：构建报
 
 ```text
-> Building task graph of root build > Resolve files of configuration ':cppToolchain' > AcceleratedRecoiling-third-party
+error: sub-compilation of mingw-w64 libmingw32.lib failed
+    ...\libc\mingw\misc\mingw_longjmp.S:1:1: note: clang exited with code 1
+error: error(compilation): clang failed with stderr: zig: error: unable to make temporary file: Permission denied
 ```
 
-`native/env/` 始终不出现，`~/.gradle/caches/modules-2/files-2.1` 下也没有 `com.wiyuka.env`。
+原因：`TEMP` 指向不可写（或不存在）的目录。报错完全没提 `TEMP`，容易误判成 mingw 汇编器坏了。
 
-原因：[cpp-build.gradle](../cpp-build.gradle) 会从 AcceleratedRecoiling 的 GitHub Release 拉取
-交叉编译工具链 zip（编译器与 sysroot），该资源在本机下载停滞。
-
-绕法（本机验证可用）：用本机 mingw-w64 编译同一份 C++ 源码——native 层与 Minecraft 版本无关，
-导出符号与 ABI 必须保持一致：
+手工构建：
 
 ```powershell
-# 在 native/ 目录执行
-g++ -std=c++20 -O3 -DAR_WINDOWS -DAR_X64 -mavx2 -march=x86-64-v2 -ffp-contract=off -fno-rtti `
-    -shared -static-libgcc -static-libstdc++ -Isrc -Iinclude `
-    -o prebuilt/natives/windows-x64/EntityCollisionOptimizer.dll `
-    src/native_error.cpp src/state/context_api.cpp src/state/metadata_api.cpp src/state/persistent_index.cpp `
-    src/spatial/spatial_index.cpp src/spatial/section_index.cpp src/query/collision_rules.cpp src/query/query_api.cpp `
-    src/motion/push_run.cpp src/motion/movement_solver.cpp src/geometry/voxel_geometry.cpp src/blocks/block_scan.cpp
+cd native
+zig build --prefix ../build/zig-native --cache-dir ../build/zig-cache/local --global-cache-dir ../build/zig-cache/global -Doptimize=ReleaseFast
 ```
 
-只要 `native/prebuilt/natives/<平台>/<库名>` 存在，构建就直接把它当作 native 资源根目录，
-不再触碰工具链；也可以用 `-PnativePrebuiltDir=<目录>` 指向别处，或 `-PskipNative` 只编译 Java。
+产物落在 `build/zig-native/<平台>/`，再由 `prepareNativeResources` 整理成 `natives/<平台>/<库名>`。
+`-Doptimize=Debug` 保留符号表便于调试；Release 会 strip，导出表不受影响。`-PskipNative` 只编译 Java。
 
-注意：`native/prebuilt/` 只是本地开发产物，已被 `.gitignore` 覆盖（`/native/*` 除白名单外全部忽略），
-发布仍应走官方工具链：`./gradlew prepareNativeResources`。
+x64 目标统一按 x86-64-v3 编译（`@Vector(4, f64)` 落到 256 位 AVX2），因此要求 CPU 支持 AVX2；
+aarch64 不额外指定 cpu。浮点保持严格模式，产物里不应出现 FMA——口径见
+[design/eco-native-zig-port.md](design/eco-native-zig-port.md)。
+
+C++ 原版已从本分支删除，只留在 git 历史里（`git show <旧提交>:native/src/...`）。
+差分验证需要一份 C++ 基线时，按设计文档「差分验证」一节用 `zig c++` 重新编一份即可。
 
 ### native access 警告
 
@@ -47,7 +57,7 @@ WARNING: Use --enable-native-access=entity_collision_optimizer to avoid a warnin
 
 原因：FML 把每个 mod 作为 JPMS 模块放进子 ModuleLayer，boot 层的
 `--enable-native-access`（MDG 已经传了 `ALL-UNNAMED`）对子层模块不生效。
-[cpp-build.gradle](../cpp-build.gradle) 之外的运行参数在 [build.gradle](../build.gradle) 的
+[native-build.gradle](../native-build.gradle) 之外的运行参数在 [build.gradle](../build.gradle) 的
 `neoForge.runs.configureEach` 里追加，仍保留了一条按 mod id 的参数备用。
 
 结论：Java 25 允许该调用，只是警告，模组继续工作；把它写进服务器的 JVM 参数即可消除。
@@ -158,8 +168,8 @@ wrapper 指向 Gradle 9.5.1，首次运行要从 services.gradle.org 拉约 130 
 
 ### 配置缓存
 
-`gradle.properties` 里 `org.gradle.configuration-cache=false`：`cpp-build.gradle` 在配置期读取
-项目属性，暂不支持配置缓存。
+`gradle.properties` 里 `org.gradle.configuration-cache=false`：`native-build.gradle` 在配置期读取
+项目属性（`skipNative` / `zigExecutable`），暂不支持配置缓存。
 
 ## Fabric → NeoForge 的差异清单
 

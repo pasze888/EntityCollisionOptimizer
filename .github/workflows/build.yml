@@ -24,8 +24,9 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
 
-      - name: Setup MSVC environment
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup Zig 0.16.0
+        shell: pwsh
+        run: ./.github/scripts/setup-zig.ps1 -Version '0.16.0'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

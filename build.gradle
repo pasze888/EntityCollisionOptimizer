@@ -242,7 +242,4 @@ publishing {
     }
 }
 
-def cppScript = file('cpp-build.gradle')
-if (cppScript.exists()) {
-    apply from: cppScript
-}
+apply from: 'native-build.gradle'

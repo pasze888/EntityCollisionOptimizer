@@ -50,6 +50,10 @@ jobs:
           java-version: "25"
           cache: gradle
 
+      - name: Setup Zig 0.16.0
+        shell: pwsh
+        run: ./.github/scripts/setup-zig.ps1 -Version '0.16.0'
+
       - name: Check release scripts
         shell: pwsh
         run: ./.github/scripts/test-release.ps1

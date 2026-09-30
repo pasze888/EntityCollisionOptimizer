@@ -9,11 +9,8 @@
 /run/
 /.idea/
 /native/*
-!/native/CMakeLists.txt
-!/native/version-script
-!/native/src/
-!/native/include/
-!/native/README.md
+!/native/build.zig
+!/native/src-zig/
 
 # Generated diagnostics belong outside the source tree.
 *.jfr

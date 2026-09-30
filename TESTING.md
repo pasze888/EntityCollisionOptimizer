@@ -10,6 +10,7 @@ data-driven Game Test system (`runGameTestServer`), not through the Fabric Game 
 
 | Layer | Entry point | Evidence produced |
 | --- | --- | --- |
+| Native ABI | `pwsh tools/verify-native.ps1 -Library build/zig-native` | 17/17 exported symbols and zero floating-point contraction per platform |
 | Contract/unit | `gradlew runGameTestUnit` | 32 focused algorithm, native-memory and interaction contracts |
 | Cross-process integration | `gradlew -p vanilla-gametest runGameTestServer` then `gradlew runGameTestIntegration` | Byte-for-byte identical entity traces with and without the optimizer |
 | Benchmarks | `gradlew runGameTestBenchmark -Pbenchmark` | MSPT samples; validates the fixture only |

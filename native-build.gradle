@@ -1,0 +1,104 @@
+// 原生库改由 Zig 构建：源码在 native/src-zig，构建脚本 native/build.zig。
+// 这条路径取代了原先"下载 AcceleratedRecoiling 交叉编译工具链再编 C++"的流程——只要机器上装了
+// zig，一次 zig build 就同时产出 windows/linux/macos 的 x64 与 arm64 动态库，无需 MSVC 与工具链。
+// 兼容边界（17 个导出符号、共享内存布局、浮点语义）与验证口径见 docs/design/eco-native-zig-port.md。
+
+def nativeProjectDir = file("./native")
+
+// zig 目标名（build.zig 里的 install 目录）→ jar 内资源路径。资源路径必须与
+// FFMBackend.platformNativePath() 的查找规则一致：/natives/<os>-<arch>/<库名>。
+def nativeTargets = [
+        [zigTarget: "windows-x64", resource: "natives/windows-x64/EntityCollisionOptimizer.dll"],
+        [zigTarget: "windows-arm64", resource: "natives/windows-arm64/EntityCollisionOptimizer.dll"],
+        [zigTarget: "linux-x64", resource: "natives/linux-x64/libEntityCollisionOptimizer.so"],
+        [zigTarget: "linux-arm64", resource: "natives/linux-arm64/libEntityCollisionOptimizer.so"],
+        [zigTarget: "macos-x64", resource: "natives/macos-x64/libEntityCollisionOptimizer.dylib"],
+]
+
+// 解析 zig 可执行文件：-PzigExecutable=<路径> 优先，否则在 PATH 里找。
+// 找不到就直接失败并说清怎么办，不要留到 Exec 里报一句看不出所以然的 IOException。
+def resolveZigExecutable = {
+    def configured = providers.gradleProperty("zigExecutable").getOrElse("zig")
+    def configuredFile = new File(configured)
+    if (configuredFile.isFile()) {
+        return configuredFile.absolutePath
+    }
+    def isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
+    def suffixes = isWindows ? [".exe", ".cmd", ".bat", ""] : [""]
+    def searchPath = System.getenv("PATH")
+    if (searchPath != null) {
+        for (String entry : searchPath.split(File.pathSeparator)) {
+            if (entry.isEmpty()) {
+                continue
+            }
+            for (String suffix : suffixes) {
+                def candidate = new File(entry, configured + suffix)
+                if (candidate.isFile()) {
+                    return candidate.absolutePath
+                }
+            }
+        }
+    }
+    throw new GradleException(
+            "找不到 zig 可执行文件。请安装 Zig 0.16.0 并确保它在 PATH 上，" +
+                    "或用 -PzigExecutable=<zig 可执行文件路径> 指定。")
+}
+
+def zigStagingDir = layout.buildDirectory.dir("zig-native")
+def generatedNativeResources = layout.buildDirectory.dir("generated/nativeResources")
+
+def zigBuildNative = tasks.register("zigBuildNative", Exec) {
+    group = "build native"
+    description = "用 Zig 交叉编译六个目标（windows/linux/macos × x64/arm64）的原生库"
+    inputs.dir(new File(nativeProjectDir, "src-zig"))
+    inputs.file(new File(nativeProjectDir, "build.zig"))
+    outputs.dir(zigStagingDir)
+    workingDir = nativeProjectDir
+    // zig 的子编译（例如交叉编译 mingw-w64 的 libmingw32.lib）会在 TEMP 下建临时文件。
+    // 受限环境里 TEMP 可能指向不可写的目录，报错是 "unable to make temporary file: Permission denied"，
+    // 堆栈完全看不出是它；把 TEMP/TMP 固定到工作区内就与外部环境无关了。
+    def zigTmpDir = layout.buildDirectory.dir("zig-tmp").get().asFile
+    environment "TEMP", zigTmpDir.absolutePath
+    environment "TMP", zigTmpDir.absolutePath
+    // 缓存目录固定在工作区内：zig 默认写用户级缓存，沙箱与 CI 里都不可控。
+    commandLine resolveZigExecutable(), "build",
+            "--prefix", zigStagingDir.get().asFile.absolutePath,
+            "--cache-dir", layout.buildDirectory.dir("zig-cache/local").get().asFile.absolutePath,
+            "--global-cache-dir", layout.buildDirectory.dir("zig-cache/global").get().asFile.absolutePath,
+            "-Doptimize=ReleaseFast"
+    doFirst {
+        // 目录要在执行期建：配置期建好的话，同一次构建里的 clean 任务会先把它删掉。
+        zigTmpDir.mkdirs()
+        println "> 开始编译原生库（Zig，ReleaseFast）"
+    }
+}
+
+def prepareNativeResources = tasks.register("prepareNativeResources", Sync) {
+    group = "build native"
+    description = "把编译出的原生库按资源路径整理进 jar"
+    dependsOn zigBuildNative
+    into generatedNativeResources
+    nativeTargets.each { target ->
+        from(new File(zigStagingDir.get().asFile, target.zigTarget)) {
+            include new File(target.resource).name
+            into new File(target.resource).parent
+        }
+    }
+    // zig build 失败时不要拿上一轮的残留产物继续打包。
+    doFirst {
+        def missing = nativeTargets.findAll {
+            !new File(new File(zigStagingDir.get().asFile, it.zigTarget), new File(it.resource).name).isFile()
+        }
+        if (!missing.isEmpty()) {
+            throw new GradleException("Zig 构建没有产出：" + missing*.zigTarget.join(", "))
+        }
+    }
+}
+
+// -PskipNative：只编 Java，不碰 zig（用于纯 Java 的编译/检查循环）。
+// 此时 jar 内没有原生库，FFM 初始化会按设计失败。
+if (providers.gradleProperty("skipNative").isPresent()) {
+    logger.lifecycle("> 已按 -PskipNative 跳过原生库构建，产物不含原生库")
+} else {
+    sourceSets.main.output.dir(generatedNativeResources, builtBy: prepareNativeResources)
+}

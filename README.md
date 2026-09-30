@@ -10,7 +10,7 @@
 
 ---
 
-Entity Collision Optimizer is a server-side NeoForge mod for Minecraft 26.1.2 (NeoForge 26.1.2.99) that uses a C++ native backend to accelerate entity queries, pushing, and movement collision while **preserving vanilla entity-collision behavior**. Install it and it works; connecting clients do not need the mod.
+Entity Collision Optimizer is a server-side NeoForge mod for Minecraft 26.1.2 (NeoForge 26.1.2.99) that uses a Zig native backend to accelerate entity queries, pushing, and movement collision while **preserving vanilla entity-collision behavior**. Install it and it works; connecting clients do not need the mod.
 
 This branch is a NeoForge port of the original Fabric mod by [water2004](https://github.com/water2004/EntityCollisionOptimizer); the collision core and its observation boundaries are unchanged.
 
@@ -59,13 +59,13 @@ These values are live snapshots from this particular scene, not a multi-run stat
 
 Minecraft stores entities in sections. A collision query walks the relevant sections, visits Java objects, checks their bounding boxes and builds the data needed by the pushing or movement code. This is simple and flexible, but the object access, temporary allocations and repeated preparation become expensive when many entities occupy a small area.
 
-Entity Collision Optimizer keeps a C++ native collision context for each dimension and updates it as entities are tracked, moved, transferred between dimensions, or removed. A compact section index mirrors Minecraft's section traversal and insertion order, while vectorized bounding-box checks narrow each query to intersecting entities without sorting every result.
+Entity Collision Optimizer keeps a native collision context for each dimension and updates it as entities are tracked, moved, transferred between dimensions, or removed. A compact section index mirrors Minecraft's section traversal and insertion order, while vectorized bounding-box checks narrow each query to intersecting entities without sorting every result.
 
-Position, velocity, bounding-box and synchronization state used by collision code live in compact shared off-heap tables. Java and C++ native code operate on the same state, while Java objects such as `Vec3` are materialized only when Java code actually reads them. Candidate bounds use a SoA layout so hot AABB loops make effective use of CPU caches and AVX2.
+Position, velocity, bounding-box and synchronization state used by collision code live in compact shared off-heap tables. Java and native code operate on the same state, while Java objects such as `Vec3` are materialized only when Java code actually reads them. Candidate bounds use a SoA layout so hot AABB loops make effective use of CPU caches and AVX2.
 
 For entity pushing, one native query performs spatial and rule filtering. Consecutive pairs that use Minecraft's standard push formula are then evaluated as a batch, in order, with each pair's velocity changes visible to the next pair. Entity-specific vanilla callbacks still run at their original point. For movement, a maintained block mask skips positions that cannot collide; Java still resolves context-sensitive `VoxelShape` values, while native code performs the bulk geometry clipping, step calculation, and movement integration.
 
-The FFM boundary therefore carries a complete query, push run, or movement operation instead of bouncing between Java and native code for every candidate. Gravity, friction, fall handling, fluids, damage, explosions, block effects, and world callbacks remain in Minecraft's normal Java logic. See [native/README.md](native/README.md) for the native module boundaries.
+The FFM boundary therefore carries a complete query, push run, or movement operation instead of bouncing between Java and native code for every candidate. Gravity, friction, fall handling, fluids, damage, explosions, block effects, and world callbacks remain in Minecraft's normal Java logic. The native side is Zig: [native/build.zig](native/build.zig) builds [native/src-zig](native/src-zig) into the platform libraries, and the frozen ABI plus its verification gates are documented in [docs/design/eco-native-zig-port.md](docs/design/eco-native-zig-port.md).
 
 ## Requirements
 
@@ -78,7 +78,7 @@ The FFM boundary therefore carries a complete query, push run, or movement opera
 | Operating system | Windows, Linux, or macOS |
 | Processor | x86-64 with AVX2 |
 
-Release JARs contain native libraries for x86-64 Windows, Linux, and macOS. ARM64 is not currently supported.
+Release JARs contain native libraries for x64 and ARM64 on Windows and Linux, and for x64 macOS. The x64 libraries are compiled for the x86-64-v3 baseline and require AVX2; the Java 25 runtime only requires SSE2, so on a pre-2013 x64 CPU the JVM starts but the native library fails to load.
 
 ## Installation
 
@@ -119,7 +119,7 @@ Use Java 25 and the included Gradle Wrapper:
 ./gradlew.bat compileJava -PskipNative
 ```
 
-`build` writes the JAR to `build/libs`. Native binaries are taken from `native/prebuilt/natives/<platform>/` when that directory exists (a development shortcut; it stays out of version control), otherwise the upstream cross-compilation toolchain is downloaded and used (`./gradlew prepareNativeResources`, currently Windows only). `-PskipNative` compiles Java without touching the native toolchain, and `-PnativePrebuiltDir=<dir>` points at another prebuilt resource root.
+`build` writes the JAR to `build/libs`. Its native binaries come from `./gradlew prepareNativeResources`, which cross-compiles `native/src-zig` for every supported platform with a single `zig build`; install Zig 0.16.0 on `PATH`, or point at it with `-PzigExecutable=<path>`. `-PskipNative` compiles Java only and produces a JAR without native binaries.
 
 The unit, cross-process integration, and benchmark GameTest suites of the Fabric version are **not ported yet**; see [TESTING.md](TESTING.md) for the current verification steps and the contract the suites must satisfy.
 

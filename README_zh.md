@@ -10,7 +10,7 @@
 
 ---
 
-实体碰撞优化是面向 Minecraft 26.1.2（NeoForge 26.1.2.99）的服务端 NeoForge 模组，通过 C++ native 后端加速实体查询、相互推动和移动碰撞，同时**保持原版实体碰撞行为**。安装即生效，连接服务器的客户端无需安装。
+实体碰撞优化是面向 Minecraft 26.1.2（NeoForge 26.1.2.99）的服务端 NeoForge 模组，通过 Zig 原生后端加速实体查询、相互推动和移动碰撞，同时**保持原版实体碰撞行为**。安装即生效，连接服务器的客户端无需安装。
 
 本分支是 [water2004 的 Fabric 原版模组](https://github.com/water2004/EntityCollisionOptimizer) 的 NeoForge 移植；碰撞内核及其观测边界保持不变。
 
@@ -59,13 +59,13 @@
 
 Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、访问其中的 Java 对象、比较碰撞箱，再为推动或移动代码准备数据。这种实现简单而灵活，但当大量实体集中在很小的空间时，对象访问、临时分配和重复的数据准备会变得昂贵。
 
-实体碰撞优化为每个维度维护独立的 C++ native 碰撞上下文，并在实体开始追踪、移动、跨维度或移除时增量更新。紧凑的区段索引会复现 Minecraft 的区段遍历和插入顺序，同时通过向量化包围盒比较筛选真正相交的实体，无需为每次查询临时排序。
+实体碰撞优化为每个维度维护独立的原生碰撞上下文，并在实体开始追踪、移动、跨维度或移除时增量更新。紧凑的区段索引会复现 Minecraft 的区段遍历和插入顺序，同时通过向量化包围盒比较筛选真正相交的实体，无需为每次查询临时排序。
 
-碰撞需要的位置、速度、包围盒和同步状态保存在紧凑的共享堆外表中，Java 与 C++ native 代码直接使用同一份状态。`Vec3` 等 Java 对象只在 Java 代码实际读取时按需创建。候选包围盒使用 SoA 布局，让热点 AABB 比较更好地利用 CPU 缓存和 AVX2。
+碰撞需要的位置、速度、包围盒和同步状态保存在紧凑的共享堆外表中，Java 与原生代码直接使用同一份状态。`Vec3` 等 Java 对象只在 Java 代码实际读取时按需创建。候选包围盒使用 SoA 布局，让热点 AABB 比较更好地利用 CPU 缓存和 AVX2。
 
 处理实体推动时，一次原生查询会完成空间和规则筛选。连续使用 Minecraft 标准推动公式的碰撞对随后按原版顺序批量计算，并且每一对产生的速度变化都会立即参与下一对计算；具有特殊行为的原版实体回调仍在原来的位置执行。处理移动时，持续维护的方块掩码会跳过不可能碰撞的位置；Java 仍负责求取依赖世界上下文的 `VoxelShape`，native 则批量完成几何裁剪、台阶尝试和移动求解。
 
-因此，一次 FFM 边界调用承载的是完整查询、一段推动序列或一次移动，而不是为每个候选实体反复在 Java 与 native 之间切换。重力、摩擦、摔落、流体、伤害、爆炸、方块效果和世界回调仍由 Minecraft 的正常 Java 逻辑处理。原生模块的职责边界见 [native/README.md](native/README.md)。
+因此，一次 FFM 边界调用承载的是完整查询、一段推动序列或一次移动，而不是为每个候选实体反复在 Java 与 native 之间切换。重力、摩擦、摔落、流体、伤害、爆炸、方块效果和世界回调仍由 Minecraft 的正常 Java 逻辑处理。原生侧由 Zig 编写：[native/build.zig](native/build.zig) 把 [native/src-zig](native/src-zig) 编成各平台动态库，冻结的 ABI 与验证口径见 [docs/design/eco-native-zig-port.md](docs/design/eco-native-zig-port.md)。
 
 ## 环境要求
 
@@ -78,7 +78,7 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 | 操作系统 | Windows、Linux 或 macOS |
 | 处理器 | 支持 AVX2 的 x86-64 处理器 |
 
-发布 JAR 内置 Windows、Linux 和 macOS 的 x86-64 原生库，目前不支持 ARM64。
+发布 JAR 内置 Windows 与 Linux 的 x64、ARM64 原生库，以及 macOS 的 x64 原生库。x64 库按 x86-64-v3 基线编译，要求 CPU 支持 AVX2；Java 25 运行时本身只要求 SSE2，因此在 2013 年前的 x64 CPU 上 JVM 能启动，但原生库会加载失败。
 
 ## 安装
 
@@ -119,7 +119,7 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 ./gradlew.bat compileJava -PskipNative
 ```
 
-`build` 的产物在 `build/libs`。原生库优先取 `native/prebuilt/natives/<平台>/`（本地开发快捷路径，不入版本控制）；该目录不存在时才走上游交叉编译工具链（`./gradlew prepareNativeResources`，目前仅 Windows）。`-PskipNative` 只编译 Java、不触碰原生工具链，`-PnativePrebuiltDir=<目录>` 可指定其它预编译资源根目录。
+`build` 的产物在 `build/libs`。原生库由 `./gradlew prepareNativeResources` 产出：一次 `zig build` 就把 `native/src-zig` 交叉编译到全部受支持平台。请安装 Zig 0.16.0 并放进 `PATH`，或用 `-PzigExecutable=<路径>` 指定。`-PskipNative` 只编译 Java，产物不含原生库。
 
 Fabric 版的单元、跨进程集成与压测 GameTest 套件**尚未移植**；当前验证步骤与套件必须满足的契约见 [TESTING.md](TESTING.md)。
 
