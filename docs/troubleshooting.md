@@ -19,6 +19,20 @@ Contains the following character: Forward slash /
 没有斜杠，所以只有本地的 `neoforge/26.1.2` 这类分支名会踩到。修法：归档前把 ref 名里不允许的
 字符替换成短横线。
 
+### CI 跑在 ubuntu 上
+
+上游原本用 `windows-latest`，是为了在那里驱动 MSVC 与 AcceleratedRecoiling 交叉编译工具链。改用
+Zig 之后这个前提消失：`zig build` 自带全部目标的 libc/SDK 桩（`libc/mingw`、`libc/darwin/libSystem.tbd`、
+`libc/glibc`），`src-zig` 也没有任何 `@cImport`/`@cInclude`，因此**交叉编译的结果与宿主无关**，
+六个目标在哪个平台编都一样。CI 因此换回 `ubuntu-latest`（上游更早的版本本来也是 ubuntu）。
+
+两个 Linux 特有的坑：
+
+- **`gradlew` 的可执行位**。仓库里原本是 `100644`，Linux 上 `./gradlew` 直接 `Permission denied`。
+  已在 git 里改成 `100755`（clone 出来即可用），workflow 里另留一条 `chmod +x gradlew` 兜底。
+- **`shell: pwsh` 仍然可用**。ubuntu runner 预装 PowerShell，`.github/scripts/*.ps1` 不用改写；
+  但非 pwsh 的步骤走 `bash -e`，任一命令非零即中止。
+
 ### 原生库由 Zig 构建，需要 Zig 0.16.0
 
 [native-build.gradle](../native-build.gradle) 的 `zigBuildNative` 任务直接调用 `zig build`，一次编出

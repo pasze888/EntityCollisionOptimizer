@@ -16,7 +16,7 @@ jobs:
   release:
     if: github.ref_type == 'tag'
     name: Build, test and publish
-    runs-on: windows-2025
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: write
@@ -60,19 +60,20 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/test-release.ps1
 
-      - name: Build release artifacts
-        shell: pwsh
-        run: .\gradlew.bat clean build --no-daemon "-PreleaseVersion=${{ steps.release.outputs.version }}"
+      # 仓库里的 gradlew 模式是 100644，Linux 上必须自己补可执行位。
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
+      - name: Build release artifacts
+        run: ./gradlew clean build --no-daemon "-PreleaseVersion=${{ steps.release.outputs.version }}"
+
+      # ubuntu 上的默认 shell 是 bash -e：任一命令非零即中止，失败命令会留在日志里。
       - name: Run correctness GameTests
-        shell: pwsh
         run: |
-          .\gradlew.bat runGameTestUnit --no-daemon "-PreleaseVersion=${{ steps.release.outputs.version }}"
-          if ($LASTEXITCODE -ne 0) { throw 'Contract and unit GameTests failed.' }
-          .\gradlew.bat -p vanilla-gametest runGameTestServer --no-daemon
-          if ($LASTEXITCODE -ne 0) { throw 'Recording the vanilla baseline traces failed.' }
-          .\gradlew.bat runGameTestIntegration --no-daemon "-PreleaseVersion=${{ steps.release.outputs.version }}"
-          if ($LASTEXITCODE -ne 0) { throw 'Cross-process integration GameTests failed.' }
+          set -e
+          ./gradlew runGameTestUnit --no-daemon "-PreleaseVersion=${{ steps.release.outputs.version }}"
+          ./gradlew -p vanilla-gametest runGameTestServer --no-daemon
+          ./gradlew runGameTestIntegration --no-daemon "-PreleaseVersion=${{ steps.release.outputs.version }}"
 
       - name: Verify and stage artifacts
         shell: pwsh

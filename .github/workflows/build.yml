@@ -9,8 +9,8 @@ permissions:
 
 jobs:
   build-and-package:
-    name: Cross-Compile & Build Mod
-    runs-on: windows-latest
+    name: Build Mod
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -34,6 +34,10 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      # 仓库里的 gradlew 模式是 100644，Linux 上必须自己补可执行位。
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Build project
         run: ./gradlew build --stacktrace
